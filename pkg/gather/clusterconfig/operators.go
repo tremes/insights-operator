@@ -13,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog"
 
@@ -75,23 +74,12 @@ func gatherClusterOperators(ctx context.Context, configClient configv1client.Con
 	if err != nil {
 		return nil, []error{err}
 	}
-	resVer, _ := getOperatorResourcesVersions(discoveryClient)
 	records := make([]record.Record, 0, len(config.Items))
 	for _, co := range config.Items {
 		records = append(records, record.Record{
 			Name: fmt.Sprintf("config/clusteroperator/%s", co.Name),
 			Item: ClusterOperatorAnonymizer{&co},
 		})
-		if resVer == nil {
-			continue
-		}
-		relRes := collectClusterOperatorResources(ctx, dynamicClient, co, resVer)
-		for _, rr := range relRes {
-			records = append(records, record.Record{
-				Name: fmt.Sprintf("config/clusteroperator/%s-%s", co.Name, rr.Name),
-				Item: record.JSONMarshaller{Object: rr},
-			})
-		}
 	}
 	namespaceEventsCollected := sets.NewString()
 	now := time.Now()
@@ -201,71 +189,6 @@ func gatherNamespaceEvents(ctx context.Context, coreClient corev1client.CoreV1In
 		return compactedEvents.Items[i].LastTimestamp.Before(compactedEvents.Items[j].LastTimestamp)
 	})
 	return []record.Record{{Name: fmt.Sprintf("events/%s", namespace), Item: EventAnonymizer{&compactedEvents}}}, nil
-}
-
-func collectClusterOperatorResources(ctx context.Context, dynamicClient dynamic.Interface, co configv1.ClusterOperator, resVer map[string][]string) []clusterOperatorResource {
-	var relObj []configv1.ObjectReference
-	for _, ro := range co.Status.RelatedObjects {
-		if strings.Contains(ro.Group, "operator.openshift.io") {
-			relObj = append(relObj, ro)
-		}
-	}
-	if len(relObj) == 0 {
-		return nil
-	}
-	var res []clusterOperatorResource
-	for _, ro := range relObj {
-		key := fmt.Sprintf("%s-%s", ro.Group, strings.ToLower(ro.Resource))
-		versions, _ := resVer[key]
-		for _, v := range versions {
-			gvr := schema.GroupVersionResource{Group: ro.Group, Version: v, Resource: strings.ToLower(ro.Resource)}
-			clusterResource, err := dynamicClient.Resource(gvr).Get(ctx, ro.Name, metav1.GetOptions{})
-			if err != nil {
-				klog.V(2).Infof("Unable to list %s resource due to: %s", gvr, err)
-			}
-			if clusterResource == nil {
-				return nil
-			}
-			var ms, kind, name, apiVersion string
-			err = failEarly(
-				func() error { return parseJSONQuery(clusterResource.Object, "spec.managementState?", &ms) },
-				func() error { return parseJSONQuery(clusterResource.Object, "kind", &kind) },
-				func() error { return parseJSONQuery(clusterResource.Object, "apiVersion", &apiVersion) },
-				func() error { return parseJSONQuery(clusterResource.Object, "metadata.name", &name) },
-			)
-			if err != nil {
-				return nil
-			}
-			res = append(res, clusterOperatorResource{ManagementState: ms, Kind: kind, Name: name, APIVersion: apiVersion})
-		}
-	}
-	return res
-}
-
-func getOperatorResourcesVersions(discoveryClient discovery.DiscoveryInterface) (map[string][]string, error) {
-	resources, err := discoveryClient.ServerPreferredResources()
-	if err != nil {
-		return nil, err
-	}
-	resourceVersionMap := make(map[string][]string)
-	for _, v := range resources {
-		if strings.Contains(v.GroupVersion, "operator.openshift.io") {
-			gv, err := schema.ParseGroupVersion(v.GroupVersion)
-			if err != nil {
-				continue
-			}
-			for _, ar := range v.APIResources {
-				key := fmt.Sprintf("%s-%s", gv.Group, ar.Name)
-				r, ok := resourceVersionMap[key]
-				if !ok {
-					resourceVersionMap[key] = []string{gv.Version}
-				} else {
-					r = append(r, gv.Version)
-				}
-			}
-		}
-	}
-	return resourceVersionMap, nil
 }
 
 // collectContainerLogs fetches log lines from the pod

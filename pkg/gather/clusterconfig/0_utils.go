@@ -9,8 +9,10 @@ import (
 	"strings"
 	"time"
 
+	networkv1 "github.com/openshift/api/network/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/json"
@@ -19,7 +21,7 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 	registryv1 "github.com/openshift/api/imageregistry/v1"
-	networkv1 "github.com/openshift/api/network/v1"
+	operatorv1 "github.com/openshift/api/operator/v1"
 	openshiftscheme "github.com/openshift/client-go/config/clientset/versioned/scheme"
 	appsv1 "k8s.io/api/apps/v1"
 	_ "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
@@ -39,9 +41,11 @@ var (
 	maxEventTimeInterval = 1 * time.Hour
 
 	registrySerializer serializer.CodecFactory
+	operatorSerializer serializer.CodecFactory
 	networkSerializer  serializer.CodecFactory
 	registryScheme     = runtime.NewScheme()
 	networkScheme      = runtime.NewScheme()
+	operatorScheme     = runtime.NewScheme()
 
 	// logTailLines sets maximum number of lines to fetch from pod logs
 	logTailLines = int64(100)
@@ -57,8 +61,10 @@ var (
 func init() {
 	utilruntime.Must(registryv1.AddToScheme(registryScheme))
 	utilruntime.Must(networkv1.AddToScheme(networkScheme))
+	utilruntime.Must(operatorv1.AddToScheme(operatorScheme))
 	networkSerializer = serializer.NewCodecFactory(networkScheme)
 	registrySerializer = serializer.NewCodecFactory(registryScheme)
+	operatorSerializer = serializer.NewCodecFactory(operatorScheme)
 }
 
 func getAllNamespaces(ctx context.Context, coreClient corev1client.CoreV1Interface) (*corev1.NamespaceList, context.Context, error) {

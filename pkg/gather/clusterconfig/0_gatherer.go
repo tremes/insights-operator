@@ -61,6 +61,10 @@ func (g *Gatherer) Gather(ctx context.Context, recorder record.Interface) error 
 		GatherMachineConfigPool(g),
 		GatherContainerRuntimeConfig(g),
 		GatherStatefulSets(g),
+		GatherClusterKubeApiServer(g),
+		GatherClusterConsole(g),
+		GatherClusterEtcd(g),
+		GatherClusterCSISnapshotController(g),
 	)
 }
 
