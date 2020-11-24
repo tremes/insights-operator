@@ -65,6 +65,14 @@ type NetworkSpec struct {
 	// +optional
 	DeployKubeProxy *bool `json:"deployKubeProxy,omitempty"`
 
+	// disableNetworkDiagnostics specifies whether or not PodNetworkConnectivityCheck
+	// CRs from a test pod to every node, apiserver and LB should be disabled or not.
+	// If unset, this property defaults to 'false' and network diagnostics is enabled.
+	// Setting this to 'true' would reduce the additional load of the pods performing the checks.
+	// +optional
+	// +kubebuilder:default:=false
+	DisableNetworkDiagnostics bool `json:"disableNetworkDiagnostics"`
+
 	// kubeProxyConfig lets us configure desired proxy configuration.
 	// If not specified, sensible defaults will be chosen by OpenShift directly.
 	// Not consumed by all network providers - currently only openshift-sdn.
@@ -74,17 +82,23 @@ type NetworkSpec struct {
 	// by the operator. Currently only Kuryr SDN is affected by this setting.
 	// Please note that turning on extensive logging may affect performance.
 	// The default value is "Normal".
+	//
+	// Valid values are: "Normal", "Debug", "Trace", "TraceAll".
+	// Defaults to "Normal".
 	// +optional
-	LogLevel LogLevel `json:"logLevel"`
+	// +kubebuilder:default=Normal
+	LogLevel LogLevel `json:"logLevel,omitempty"`
 }
 
 // ClusterNetworkEntry is a subnet from which to allocate PodIPs. A network of size
-// HostPrefix (in CIDR notation) will be allocated when nodes join the cluster.
+// HostPrefix (in CIDR notation) will be allocated when nodes join the cluster. If
+// the HostPrefix field is not used by the plugin, it can be left unset.
 // Not all network providers support multiple ClusterNetworks
 type ClusterNetworkEntry struct {
 	CIDR string `json:"cidr"`
 	// +kubebuilder:validation:Minimum=0
-	HostPrefix uint32 `json:"hostPrefix"`
+	// +optional
+	HostPrefix uint32 `json:"hostPrefix,omitempty"`
 }
 
 // DefaultNetworkDefinition represents a single network plugin's configuration.
@@ -315,11 +329,27 @@ type OVNKubernetesConfig struct {
 	// not using OVN.
 	// +optional
 	HybridOverlayConfig *HybridOverlayConfig `json:"hybridOverlayConfig,omitempty"`
+	// ipsecConfig enables and configures IPsec for pods on the pod network within the
+	// cluster.
+	// +optional
+	IPsecConfig *IPsecConfig `json:"ipsecConfig,omitempty"`
 }
 
 type HybridOverlayConfig struct {
 	// HybridClusterNetwork defines a network space given to nodes on an additional overlay network.
 	HybridClusterNetwork []ClusterNetworkEntry `json:"hybridClusterNetwork"`
+	// HybridOverlayVXLANPort defines the VXLAN port number to be used by the additional overlay network.
+	// Default is 4789
+	// +optional
+	HybridOverlayVXLANPort *uint32 `json:"hybridOverlayVXLANPort,omitempty"`
+}
+
+type IPsecConfig struct {
+	// enable enables IPsec encryption for pod-to-pod traffic on the pod network
+	// within the cluster. Default is false.
+	// +optional
+	// +kubebuilder:default:=false
+	Enable bool `json:"enable"`
 }
 
 // NetworkType describes the network plugin type to configure
@@ -331,7 +361,9 @@ type ProxyArgumentList []string
 // ProxyConfig defines the configuration knobs for kubeproxy
 // All of these are optional and have sensible defaults
 type ProxyConfig struct {
-	// The period that iptables rules are refreshed.
+	// An internal kube-proxy parameter. In older releases of OCP, this sometimes needed to be adjusted
+	// in large clusters for performance reasons, but this is no longer necessary, and there is no reason
+	// to change this from the default value.
 	// Default: 30s
 	IptablesSyncPeriod string `json:"iptablesSyncPeriod,omitempty"`
 

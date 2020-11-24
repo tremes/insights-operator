@@ -19,8 +19,6 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	configv1client "github.com/openshift/client-go/config/clientset/versioned/typed/config/v1"
 	_ "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
-	"k8s.io/client-go/discovery"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 
@@ -54,19 +52,19 @@ func GatherClusterOperators(g *Gatherer) func() ([]record.Record, []error) {
 		if err != nil {
 			return nil, []error{err}
 		}
-		discoveryClient, err := discovery.NewDiscoveryClientForConfig(g.gatherKubeConfig)
+		/* 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(g.gatherKubeConfig)
 		if err != nil {
 			return nil, []error{err}
 		}
 		dynamicClient, err := dynamic.NewForConfig(g.gatherKubeConfig)
 		if err != nil {
 			return nil, []error{err}
-		}
-		return gatherClusterOperators(g.ctx, gatherConfigClient, gatherKubeClient.CoreV1(), discoveryClient, dynamicClient)
+		} */
+		return gatherClusterOperators(g.ctx, gatherConfigClient, gatherKubeClient.CoreV1())
 	}
 }
 
-func gatherClusterOperators(ctx context.Context, configClient configv1client.ConfigV1Interface, coreClient corev1client.CoreV1Interface, discoveryClient discovery.DiscoveryInterface, dynamicClient dynamic.Interface) ([]record.Record, []error) {
+func gatherClusterOperators(ctx context.Context, configClient configv1client.ConfigV1Interface, coreClient corev1client.CoreV1Interface) ([]record.Record, []error) {
 	config, err := configClient.ClusterOperators().List(ctx, metav1.ListOptions{})
 	if errors.IsNotFound(err) {
 		return nil, nil

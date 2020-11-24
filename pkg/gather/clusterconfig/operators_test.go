@@ -8,8 +8,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	configfake "github.com/openshift/client-go/config/clientset/versioned/fake"
-	"k8s.io/apimachinery/pkg/runtime"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 )
 
@@ -24,7 +22,7 @@ func TestGatherClusterOperator(t *testing.T) {
 	if err != nil {
 		t.Fatal("unable to create fake clusteroperator", err)
 	}
-	records, errs := gatherClusterOperators(context.Background(), configCS.ConfigV1(), kubefake.NewSimpleClientset().CoreV1(), configCS.Discovery(), dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()))
+	records, errs := gatherClusterOperators(context.Background(), configCS.ConfigV1(), kubefake.NewSimpleClientset().CoreV1())
 	if len(errs) > 0 {
 		t.Errorf("unexpected errors: %#v", errs)
 		return
