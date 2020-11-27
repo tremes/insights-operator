@@ -66,6 +66,7 @@ var gatherFunctions = map[string]gatherFunction{
 	"netnamespaces":                     GatherNetNamespace,
 	"openshift_apiserver_operator_logs": GatherOpenShiftAPIServerOperatorLogs,
 	"openshift_sdn_logs":                GatherOpenshiftSDNLogs,
+	"olm_operators": GatherOLMOperators,
 }
 
 // New creates new Gatherer

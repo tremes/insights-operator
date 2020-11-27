@@ -1,0 +1,26 @@
+[
+    {
+        "name": "eap-operator.v2.0.2",
+        "version": "2.0.2"
+    },
+    {
+        "name": "elasticsearch-operator.4.6.0-202011221454.p0",
+        "version": "4.6.0-202011221454.p0"
+    },
+    {
+        "name": "kiali-operator.v1.24.4",
+        "version": "1.24.4"
+    },
+    {
+        "name": "sparkoperator.v1.1.0",
+        "version": "1.1.0"
+    },
+    {
+        "name": "packageserver",
+        "version": "0.16.1"
+    },
+    {
+        "name": "postgresql-operator.v0.1.1",
+        "version": "0.1.1"
+    }
+]
