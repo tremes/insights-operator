@@ -12,8 +12,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 
-	_ "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
-
 	"github.com/openshift/insights-operator/pkg/record"
 )
 
@@ -66,7 +64,7 @@ var gatherFunctions = map[string]gatherFunction{
 	"netnamespaces":                     GatherNetNamespace,
 	"openshift_apiserver_operator_logs": GatherOpenShiftAPIServerOperatorLogs,
 	"openshift_sdn_logs":                GatherOpenshiftSDNLogs,
-	"olm_operators": GatherOLMOperators,
+	"olm_operators":                     GatherOLMOperators,
 }
 
 // New creates new Gatherer
