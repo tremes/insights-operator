@@ -49,6 +49,7 @@ github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/protoc-gen-gogo/descriptor
 github.com/gogo/protobuf/sortkeys
 # github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e
+## explicit
 github.com/golang/groupcache/lru
 # github.com/golang/protobuf v1.4.3
 github.com/golang/protobuf/proto
@@ -105,6 +106,9 @@ github.com/munnerz/goautoneg
 ## explicit
 github.com/openshift/api/authorization/v1
 github.com/openshift/api/config/v1
+github.com/openshift/api/image/docker10
+github.com/openshift/api/image/dockerpre012
+github.com/openshift/api/image/v1
 github.com/openshift/api/imageregistry/v1
 github.com/openshift/api/network/v1
 github.com/openshift/api/operator/v1
@@ -123,6 +127,8 @@ github.com/openshift/client-go/config/clientset/versioned/fake
 github.com/openshift/client-go/config/clientset/versioned/scheme
 github.com/openshift/client-go/config/clientset/versioned/typed/config/v1
 github.com/openshift/client-go/config/clientset/versioned/typed/config/v1/fake
+github.com/openshift/client-go/image/clientset/versioned/scheme
+github.com/openshift/client-go/image/clientset/versioned/typed/image/v1
 github.com/openshift/client-go/imageregistry/clientset/versioned
 github.com/openshift/client-go/imageregistry/clientset/versioned/fake
 github.com/openshift/client-go/imageregistry/clientset/versioned/scheme
