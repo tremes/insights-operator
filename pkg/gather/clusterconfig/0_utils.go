@@ -23,6 +23,7 @@ import (
 	registryv1 "github.com/openshift/api/imageregistry/v1"
 	networkv1 "github.com/openshift/api/network/v1"
 	openshiftscheme "github.com/openshift/client-go/config/clientset/versioned/scheme"
+	configv1client "github.com/openshift/client-go/config/clientset/versioned/typed/config/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 )
@@ -350,4 +351,18 @@ func parseJSONQuery(j map[string]interface{}, jq string, o interface{}) error {
 		return fmt.Errorf("key %s wasn't found in %v ", k, j)
 	}
 	return fmt.Errorf("query didn't match the structure")
+}
+
+func isRunningOnVsphere(ctx context.Context, configClient configv1client.ConfigV1Interface) (bool, error) {
+	isRunningOnVsphere := false
+	infrastructure, err := configClient.Infrastructures().Get(ctx, "cluster", metav1.GetOptions{})
+	if err != nil {
+		return isRunningOnVsphere, err
+	}
+
+	if infrastructure.Spec.PlatformSpec.Type == configv1.VSpherePlatformType {
+		isRunningOnVsphere = true
+	}
+
+	return isRunningOnVsphere, nil
 }
