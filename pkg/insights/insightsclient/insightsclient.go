@@ -17,11 +17,11 @@ import (
 	"strconv"
 	"time"
 
-	"k8s.io/client-go/pkg/version"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/transport"
 	"k8s.io/component-base/metrics"
 	"k8s.io/component-base/metrics/legacyregistry"
+	"k8s.io/component-base/version"
 
 	"k8s.io/klog/v2"
 
@@ -284,6 +284,55 @@ func (c *Client) Send(ctx context.Context, endpoint string, source Source) error
 
 // RecvReport perform a request to Insights Results Smart Proxy endpoint
 func (c Client) RecvReport(ctx context.Context, endpoint string) (*io.ReadCloser, error) {
+	resp, err := c.doGetRequest(ctx, endpoint, true)
+
+	if err != nil {
+		klog.Errorf("Unable to retrieve latest report for %s: %v", c.clusterVersion.Spec.ClusterID, err)
+		counterRequestRecvReport.WithLabelValues(c.metricsName, "0").Inc()
+		return nil, err
+	}
+
+	counterRequestRecvReport.WithLabelValues(c.metricsName, strconv.Itoa(resp.StatusCode)).Inc()
+	err = validateResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode == http.StatusOK {
+		return &resp.Body, nil
+	}
+
+	klog.Warningf("Report response status code: %d", resp.StatusCode)
+	return nil, fmt.Errorf("Report response status code: %d", resp.StatusCode)
+}
+
+// RecvOCMData sends a get request to the OCM API endpoint defined in the config
+func (c Client) RecvOCMData(ctx context.Context, endpoint string) ([]byte, error) {
+	resp, err := c.doGetRequest(ctx, endpoint, false)
+
+	if err != nil {
+		klog.Errorf("Unable to retrieve data from %s: %v", endpoint, err)
+		return nil, err
+	}
+
+	err = validateResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode == http.StatusOK {
+		data, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return data, nil
+	}
+
+	klog.Warningf("OCM response status code: %d", resp.StatusCode)
+	return nil, fmt.Errorf("OCM response status code: %d", resp.StatusCode)
+}
+
+func (c Client) doGetRequest(ctx context.Context, endpoint string, addClusterID bool) (*http.Response, error) {
 	cv, err := c.getClusterVersion()
 	if err != nil {
 		return nil, err
@@ -291,9 +340,11 @@ func (c Client) RecvReport(ctx context.Context, endpoint string) (*io.ReadCloser
 	if cv == nil {
 		return nil, ErrWaitingForVersion
 	}
-
-	endpoint = fmt.Sprintf(endpoint, cv.Spec.ClusterID)
-	klog.Infof("Retrieving report for cluster: %s", cv.Spec.ClusterID)
+	// TODO the if should be likely removed
+	if addClusterID {
+		endpoint = fmt.Sprintf(endpoint, cv.Spec.ClusterID)
+	}
+	klog.Infof("Retrieving for cluster: %s", cv.Spec.ClusterID)
 	klog.Infof("Endpoint: %s", endpoint)
 
 	req, err := c.prepareRequest(ctx, http.MethodGet, endpoint, cv)
@@ -304,26 +355,25 @@ func (c Client) RecvReport(ctx context.Context, endpoint string) (*io.ReadCloser
 	// dynamically set the proxy environment
 	c.client.Transport = clientTransport(c.authorizer)
 
-	klog.V(4).Infof("Retrieving report from %s", req.URL.String())
+	klog.V(4).Infof("Retrieving from %s", req.URL.String())
 	resp, err := c.client.Do(req)
-
 	if err != nil {
-		klog.Errorf("Unable to retrieve latest report for %s: %v", cv.Spec.ClusterID, err)
-		counterRequestRecvReport.WithLabelValues(c.metricsName, "0").Inc()
 		return nil, err
 	}
+	return resp, nil
+}
 
-	counterRequestRecvReport.WithLabelValues(c.metricsName, strconv.Itoa(resp.StatusCode)).Inc()
+func validateResponse(resp *http.Response) error {
 	requestID := resp.Header.Get("x-rh-insights-request-id")
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		klog.V(2).Infof("gateway server %s returned 401, x-rh-insights-request-id=%s", resp.Request.URL, requestID)
-		return nil, authorizer.Error{Err: fmt.Errorf("your Red Hat account is not enabled for remote support or your token has expired")}
+		return authorizer.Error{Err: fmt.Errorf("your Red Hat account is not enabled for remote support or your token has expired")}
 	}
 
 	if resp.StatusCode == http.StatusForbidden {
 		klog.V(2).Infof("gateway server %s returned 403, x-rh-insights-request-id=%s", resp.Request.URL, requestID)
-		return nil, authorizer.Error{Err: fmt.Errorf("your Red Hat account is not enabled for remote support")}
+		return authorizer.Error{Err: fmt.Errorf("your Red Hat account is not enabled for remote support")}
 	}
 
 	if resp.StatusCode == http.StatusBadRequest {
@@ -331,7 +381,7 @@ func (c Client) RecvReport(ctx context.Context, endpoint string) (*io.ReadCloser
 		if len(body) > 1024 {
 			body = body[:1024]
 		}
-		return nil, fmt.Errorf("gateway server bad request: %s (request=%s): %s", resp.Request.URL, requestID, string(body))
+		return fmt.Errorf("gateway server bad request: %s (request=%s): %s", resp.Request.URL, requestID, string(body))
 	}
 	if resp.StatusCode == http.StatusNotFound {
 		body, _ := ioutil.ReadAll(resp.Body)
@@ -350,15 +400,9 @@ func (c Client) RecvReport(ctx context.Context, endpoint string) (*io.ReadCloser
 		if len(body) > 1024 {
 			body = body[:1024]
 		}
-		return nil, fmt.Errorf("gateway server reported unexpected error code: %d (request=%s): %s", resp.StatusCode, requestID, string(body))
+		return fmt.Errorf("gateway server reported unexpected error code: %d (request=%s): %s", resp.StatusCode, requestID, string(body))
 	}
-
-	if resp.StatusCode == http.StatusOK {
-		return &resp.Body, nil
-	}
-
-	klog.Warningf("Report response status code: %d", resp.StatusCode)
-	return nil, fmt.Errorf("Report response status code: %d", resp.StatusCode)
+	return nil
 }
 
 func responseBody(r *http.Response) string {

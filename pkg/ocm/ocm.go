@@ -2,11 +2,10 @@ package ocm
 
 import (
 	"context"
-	"io/ioutil"
-	"net/http"
 	"time"
 
 	"github.com/openshift/insights-operator/pkg/config"
+	"github.com/openshift/insights-operator/pkg/insights/insightsclient"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,6 +23,7 @@ type Controller struct {
 	coreClient   corev1client.CoreV1Interface
 	context      context.Context
 	configurator Configurator
+	client       *insightsclient.Client
 }
 
 // Configurator represents the interface to retrieve the configuration for the gatherer
@@ -33,11 +33,12 @@ type Configurator interface {
 }
 
 // New creates new instance
-func New(ctx context.Context, coreClient corev1client.CoreV1Interface, configurator Configurator) *Controller {
+func New(ctx context.Context, coreClient corev1client.CoreV1Interface, configurator Configurator, insightsClient *insightsclient.Client) *Controller {
 	return &Controller{
 		coreClient:   coreClient,
 		context:      ctx,
 		configurator: configurator,
+		client:       insightsClient,
 	}
 }
 
@@ -63,9 +64,10 @@ func (c *Controller) Run() {
 }
 
 func (c *Controller) requestDataAndCheckSecret(endpoint string) {
-	data, err := requestData(endpoint)
+	data, err := c.client.RecvOCMData(c.context, endpoint)
 	if err != nil {
 		klog.Errorf("errror requesting data from %s: %v", endpoint, err)
+		return
 	}
 	// check & update the secret here
 	ok, err := c.checkSecret(data)
@@ -136,26 +138,4 @@ func (o *Controller) updateSecret(s *v1.Secret, data []byte) (*v1.Secret, error)
 		return nil, err
 	}
 	return s, nil
-}
-
-// TODO
-// - no need to create new HTTP client every time
-// - add authorization
-// - add response status check
-// - move this to insightsclient?
-func requestData(endpoint string) ([]byte, error) {
-	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-	client := &http.Client{}
-	res, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	d, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return nil, err
-	}
-	return d, nil
 }
