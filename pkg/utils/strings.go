@@ -30,3 +30,14 @@ func UniqueStrings(list []string) []string {
 
 	return set
 }
+
+// RemoveStringFromSlice removes a string from a slice
+func RemoveStringFromSlice(str string, slice []string) []string {
+	for i, v := range slice {
+		if v == str {
+			slice = append(slice[:i], slice[i+1:]...)
+			return slice
+		}
+	}
+	return slice
+}

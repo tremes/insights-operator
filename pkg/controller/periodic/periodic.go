@@ -74,6 +74,7 @@ func (c *Controller) Run(stopCh <-chan struct{}, initialDelay time.Duration) {
 	}
 
 	go wait.Until(func() { c.periodicTrigger(stopCh) }, time.Second, stopCh)
+	go wait.Until(func() { c.periodicWorkloadsTrigger(stopCh) }, time.Second, stopCh)
 
 	<-stopCh
 }
@@ -81,7 +82,7 @@ func (c *Controller) Run(stopCh <-chan struct{}, initialDelay time.Duration) {
 // Runs the gatherers one after the other.
 // Currently their is only 1 gatherer (clusterconfig) and no new gatherer is on the horizon.
 // Running the gatherers in parallel should be a future improvement when a new gatherer is introduced.
-func (c *Controller) Gather() {
+func (c *Controller) Gather(excludes ...string) {
 	if !c.configurator.Config().Report {
 		klog.V(3).Info("Gather is disabled by configuration.")
 		return
@@ -101,7 +102,7 @@ func (c *Controller) Gather() {
 	for name := range c.gatherers {
 		_ = wait.ExponentialBackoff(backoff, func() (bool, error) {
 			start := time.Now()
-			err := c.runGatherer(name)
+			err := c.runGatherer(name, excludes...)
 			if err == nil {
 				klog.V(3).Infof("Periodic gather %s completed in %s", name, time.Since(start).Truncate(time.Millisecond))
 				c.statuses[name].UpdateStatus(controllerstatus.Summary{Healthy: true})
@@ -115,7 +116,7 @@ func (c *Controller) Gather() {
 }
 
 // Does the prep for running a gatherer then calls gatherer.Gather. (getting the context, cleaning the recorder)
-func (c *Controller) runGatherer(name string) error {
+func (c *Controller) runGatherer(name string, excludes ...string) error {
 	gatherer, ok := c.gatherers[name]
 	if !ok {
 		klog.V(2).Infof("No such gatherer %s", name)
@@ -129,7 +130,7 @@ func (c *Controller) runGatherer(name string) error {
 		}
 	}()
 	klog.V(4).Infof("Running %s", name)
-	return gatherer.Gather(ctx, c.configurator.Config().Gather, c.recorder)
+	return gatherer.Gather(ctx, c.configurator.Config().Gather, c.recorder, excludes...)
 }
 
 // Periodically starts the gathering.
@@ -154,7 +155,23 @@ func (c *Controller) periodicTrigger(stopCh <-chan struct{}) {
 			klog.Infof("Gathering cluster info every %s", interval)
 
 		case <-time.After(interval):
+			c.Gather("workload_info")
+		}
+	}
+}
+
+// Periodically starts the workloads gathering.
+func (c *Controller) periodicWorkloadsTrigger(stopCh <-chan struct{}) {
+	//klog.Infof("Gathering workloads info every %s", interval)
+	for {
+		select {
+		case <-stopCh:
+			return
+
+		case <-time.After(24 * time.Hour):
+			klog.Infof("Gathering workloads fingerprints")
 			c.Gather()
 		}
+
 	}
 }

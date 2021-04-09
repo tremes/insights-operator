@@ -140,7 +140,7 @@ func NewGatherInfo(gather string, rv reflect.Value) *GatherInfo {
 }
 
 // Gather is hosting and calling all the recording functions
-func (g *Gatherer) Gather(ctx context.Context, gatherList []string, recorder recorder.Interface) error {
+func (g *Gatherer) Gather(ctx context.Context, gatherList []string, recorder recorder.Interface, excludes ...string) error {
 	g.ctx = ctx
 	var errors []string
 	var gatherReport gatherMetadata
@@ -151,6 +151,13 @@ func (g *Gatherer) Gather(ctx context.Context, gatherList []string, recorder rec
 
 	if utils.StringInSlice(gatherAll, gatherList) {
 		gatherList = fullGatherList()
+	}
+
+	// exclude some gatherers
+	for _, e := range excludes {
+		if utils.StringInSlice(e, gatherList) {
+			gatherList = utils.RemoveStringFromSlice(e, gatherList)
+		}
 	}
 
 	// Starts the gathers in Go routines
