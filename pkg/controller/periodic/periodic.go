@@ -74,7 +74,6 @@ func (c *Controller) Run(stopCh <-chan struct{}, initialDelay time.Duration) {
 	}
 
 	go wait.Until(func() { c.periodicTrigger(stopCh) }, time.Second, stopCh)
-	go wait.Until(func() { c.periodicWorkloadsTrigger(stopCh) }, time.Second, stopCh)
 
 	<-stopCh
 }
@@ -140,6 +139,7 @@ func (c *Controller) periodicTrigger(stopCh <-chan struct{}) {
 	defer closeFn()
 
 	interval := c.configurator.Config().Interval
+	dailyInterval := interval
 	klog.Infof("Gathering cluster info every %s", interval)
 	for {
 		select {
@@ -155,23 +155,12 @@ func (c *Controller) periodicTrigger(stopCh <-chan struct{}) {
 			klog.Infof("Gathering cluster info every %s", interval)
 
 		case <-time.After(interval):
-			c.Gather("workload_info")
+			if dailyInterval >= 24*time.Hour {
+				c.Gather()
+			} else {
+				c.Gather("workload_info")
+			}
+			dailyInterval = dailyInterval + interval
 		}
-	}
-}
-
-// Periodically starts the workloads gathering.
-func (c *Controller) periodicWorkloadsTrigger(stopCh <-chan struct{}) {
-	//klog.Infof("Gathering workloads info every %s", interval)
-	for {
-		select {
-		case <-stopCh:
-			return
-
-		case <-time.After(24 * time.Hour):
-			klog.Infof("Gathering workloads fingerprints")
-			c.Gather()
-		}
-
 	}
 }
