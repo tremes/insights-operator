@@ -1,6 +1,7 @@
 package clusterconfig
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -40,7 +41,8 @@ type CompactedEventList struct {
 }
 
 // Used to detect the possible stack trace on logs
-var stackTraceRegex = regexp.MustCompile(`.*/[^/]*:\d+.*0[xX][0-9a-fA-F]+`)
+//var stackTraceRegex = regexp.MustCompile(`.*/[^/]*:\d+.*0[xX][0-9a-fA-F]+`)
+var myStackTraceRegex = regexp.MustCompile(`\.go:[0-9]+\s\+0x`)
 
 // GatherClusterOperatorPodsAndEvents collects information about all pods
 // and events from namespaces of degraded cluster operators. The collected
@@ -290,14 +292,27 @@ func getContainerLogs(ctx context.Context,
 		}
 
 		// check for stack tracer
-		if found := stackTraceRegex.MatchString(logString); found {
-			klog.V(2).Infof(
-				"Stack trace found in log for %s container %s pod in namespace %s (previous: %v).",
-				c.Name,
-				pod.Name,
-				pod.Namespace,
-				isPrevious)
-			logString, err = getContainerLogString(ctx, client, pod, c.Name, isPrevious, buf, &logTailLinesLong)
+		if found := myStackTraceRegex.MatchString(logString); found {
+			//load full log
+			completeLog, err := getContainerLogString(ctx, client, pod, c.Name, isPrevious, buf, nil)
+			scanner := bufio.NewScanner(strings.NewReader(completeLog))
+
+			i := 0
+			firstMatch := false
+			var stLineIndex int
+			for scanner.Scan() {
+				line := scanner.Text()
+				i++
+				// tried to find first line matching the regex
+				if myStackTraceRegex.MatchString(line) && !firstMatch {
+					firstMatch = true
+					// there are usually more lines before the first match of the regex
+					stLineIndex = i - 20
+				}
+			}
+			numOfLinesToInclude := int64(i - stLineIndex)
+			klog.V(2).Infof("Stack trace found in log for %s container %s pod in namespace %s (previous: %v).", c.Name, pod.Name, pod.Namespace, isPrevious)
+			logString, err = getContainerLogString(ctx, client, pod, c.Name, isPrevious, buf, &numOfLinesToInclude)
 			if err != nil {
 				klog.V(2).Infof("Error: %q", err)
 				continue
