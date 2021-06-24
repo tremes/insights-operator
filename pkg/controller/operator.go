@@ -170,7 +170,7 @@ func (s *Operator) Run(ctx context.Context, controller *controllercmd.Controller
 	
 	// OMC controller periodically checks and pull data from the OCM API
 	// the data is exposed in the OpenShift API
-	ocmController := ocm.New(ctx, gatherKubeClient.CoreV1(), configObserver, insightsClient)
+	ocmController := ocm.New(ctx, kubeClient.CoreV1(), configObserver, insightsClient)
 	go ocmController.Run()
 
 	<-ctx.Done()

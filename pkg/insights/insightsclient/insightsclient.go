@@ -392,7 +392,7 @@ func validateResponse(resp *http.Response) error {
 			StatusCode: resp.StatusCode,
 			Err:        fmt.Errorf("insights report not found: %s (request=%s): %s", resp.Request.URL, requestID, string(body)),
 		}
-		return nil, notFoundErr
+		return notFoundErr
 	}
 
 	if resp.StatusCode >= 300 || resp.StatusCode < 200 {
