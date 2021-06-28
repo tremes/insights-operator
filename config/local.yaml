@@ -8,6 +8,6 @@ endpoint: http://[::1]:8081
 impersonate: system:serviceaccount:openshift-insights:gather
 ocm:
   endpoint: https://jsonplaceholder.typicode.com/albums?id=1
-  interval: "6h"
+  interval: "8h"
 gather:
   - ALL

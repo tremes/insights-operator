@@ -2,9 +2,11 @@ package ocm
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/openshift/insights-operator/pkg/config"
+	"github.com/openshift/insights-operator/pkg/controllerstatus"
 	"github.com/openshift/insights-operator/pkg/insights/insightsclient"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -15,11 +17,12 @@ import (
 
 const (
 	targetNamespaceName = "openshift-config-managed"
-	secretName          = "etc-pki-entitlement"
+	secretName          = "etc-pki-entitlement" //nolint: gosec
 )
 
 // Controller holds all the required resources to be able to communicate with OCM API
 type Controller struct {
+	controllerstatus.Simple
 	coreClient   corev1client.CoreV1Interface
 	context      context.Context
 	configurator Configurator
@@ -33,8 +36,10 @@ type Configurator interface {
 }
 
 // New creates new instance
-func New(ctx context.Context, coreClient corev1client.CoreV1Interface, configurator Configurator, insightsClient *insightsclient.Client) *Controller {
+func New(ctx context.Context, coreClient corev1client.CoreV1Interface, configurator Configurator,
+	insightsClient *insightsclient.Client) *Controller {
 	return &Controller{
+		Simple:       controllerstatus.Simple{Name: "ocmcontroller"},
 		coreClient:   coreClient,
 		context:      ctx,
 		configurator: configurator,
@@ -71,18 +76,21 @@ func (c *Controller) Run() {
 func (c *Controller) requestDataAndCheckSecret(endpoint string) {
 	data, err := c.client.RecvOCMData(c.context, endpoint)
 	if err != nil {
-		klog.Errorf("errror requesting data from %s: %v", endpoint, err)
+		c.Simple.UpdateStatus(controllerstatus.Summary{
+			Operation: controllerstatus.PullingSCACerts,
+			Reason:    "FailedToPullSCAData",
+			Message:   fmt.Sprintf("Failed to pull SCA data from %s: %v", endpoint, err),
+		})
 		return
 	}
 	// check & update the secret here
 	err = c.checkSecret(data)
 	if err != nil {
-		// TODO - change IO status in case of failure ?
 		klog.Errorf("error when checking the %s secret: %v", secretName, err)
 		return
 	}
-	klog.Infof("%s secret successfuly updated", secretName)
-
+	klog.Infof("%s secret successfully updated", secretName)
+	c.Simple.UpdateStatus(controllerstatus.Summary{Healthy: true})
 }
 
 // checkSecret checks "etc-pki-entitlement" secret in the "openshift-config-managed" namespace.
@@ -91,7 +99,7 @@ func (c *Controller) requestDataAndCheckSecret(endpoint string) {
 func (c *Controller) checkSecret(data []byte) error {
 	scaSec, err := c.coreClient.Secrets(targetNamespaceName).Get(c.context, secretName, metav1.GetOptions{})
 
-	//if the secret doesn't exist then create one
+	// if the secret doesn't exist then create one
 	if errors.IsNotFound(err) {
 		_, err = c.createSecret(data)
 		if err != nil {
@@ -110,7 +118,7 @@ func (c *Controller) checkSecret(data []byte) error {
 	return nil
 }
 
-func (o *Controller) createSecret(data []byte) (*v1.Secret, error) {
+func (c *Controller) createSecret(data []byte) (*v1.Secret, error) {
 	newSCA := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
@@ -123,7 +131,7 @@ func (o *Controller) createSecret(data []byte) (*v1.Secret, error) {
 		},
 		Type: v1.SecretTypeTLS,
 	}
-	cm, err := o.coreClient.Secrets(targetNamespaceName).Create(o.context, newSCA, metav1.CreateOptions{})
+	cm, err := c.coreClient.Secrets(targetNamespaceName).Create(c.context, newSCA, metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -131,14 +139,13 @@ func (o *Controller) createSecret(data []byte) (*v1.Secret, error) {
 }
 
 // updateSecret updates provided secret with given data
-func (o *Controller) updateSecret(s *v1.Secret, data []byte) (*v1.Secret, error) {
-
+func (c *Controller) updateSecret(s *v1.Secret, data []byte) (*v1.Secret, error) {
 	// TODO set the data correctly
 	s.Data = map[string][]byte{
 		v1.TLSCertKey:       data,
 		v1.TLSPrivateKeyKey: data,
 	}
-	s, err := o.coreClient.Secrets(s.Namespace).Update(o.context, s, metav1.UpdateOptions{})
+	s, err := c.coreClient.Secrets(s.Namespace).Update(c.context, s, metav1.UpdateOptions{})
 	if err != nil {
 		return nil, err
 	}

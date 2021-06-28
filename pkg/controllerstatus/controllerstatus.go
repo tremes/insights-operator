@@ -20,6 +20,8 @@ const (
 	Uploading Operation = "Uploading"
 	// GatheringReport specific for gathering the report from the cluster
 	GatheringReport Operation = "GatheringReport"
+	// PullingSCACerts is specific operation for pull the SCA cert data from the OCM
+	PullingSCACerts Operation = "PullingSCACerts"
 )
 
 // Summary represents the status summary of an Operation
@@ -64,6 +66,7 @@ func (s *Simple) UpdateStatus(summary Summary) { //nolint: gocritic
 		klog.V(2).Infof("name=%s healthy=%t reason=%s message=%s", s.Name, summary.Healthy, summary.Reason, summary.Message)
 		s.summary.Reason = summary.Reason
 		s.summary.Message = summary.Message
+		s.summary.Operation = summary.Operation
 		return
 	}
 }

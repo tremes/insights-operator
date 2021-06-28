@@ -24,12 +24,21 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// How many upload failures in a row we tolerate before starting reporting
-// as UploadDegraded
-const uploadFailuresCountThreshold = 5
+const (
+	// How many upload failures in a row we tolerate before starting reporting
+	// as UploadDegraded
+	uploadFailuresCountThreshold = 5
+	// GatherFailuresCountThreshold defines how many gatherings can fail in a row before we report Degraded
+	GatherFailuresCountThreshold = 5
 
-// GatherFailuresCountThreshold defines how many gatherings can fail in a row before we report Degraded
-const GatherFailuresCountThreshold = 5
+	pullingSCACertsThreshold = 3
+	// OperatorDisabled defines the condition type when the operator's primary funcion has been disabled
+	OperatorDisabled configv1.ClusterStatusConditionType = "Disabled"
+	// UploadDegraded defines the condition type when a report is successfully uploaded
+	UploadDegraded configv1.ClusterStatusConditionType = "UploadDegraded"
+	// SCACertsExpired defines the condition type when data can't be retrieved from OCM API
+	SCACertsExpired configv1.ClusterStatusConditionType = "SCACertsExpired"
+)
 
 type Reported struct {
 	LastReportTime metav1.Time `json:"lastReportTime"`
@@ -134,7 +143,7 @@ func (c *Controller) merge(existing *configv1.ClusterOperator) *configv1.Cluster
 	var last time.Time
 	var reason string
 	var errs []string
-	var uploadErrorReason, uploadErrorMessage, disabledReason, disabledMessage string
+	var uploadErrorReason, uploadErrorMessage, disabledReason, disabledMessage, ocmErrorReason, ocmErrorMsg string
 	allReady := true
 	for i, source := range c.Sources() {
 		summary, ready := source.CurrentStatus()
@@ -153,7 +162,8 @@ func (c *Controller) merge(existing *configv1.ClusterOperator) *configv1.Cluster
 
 		degradingFailure := true
 
-		if summary.Operation == controllerstatus.Uploading {
+		switch summary.Operation { //nolint: exhaustive
+		case controllerstatus.Uploading:
 			if summary.Count < uploadFailuresCountThreshold {
 				klog.V(4).Infof("Number of last upload failures %d lower than threshold %d. Not marking as degraded.",
 					summary.Count, uploadFailuresCountThreshold)
@@ -170,7 +180,7 @@ func (c *Controller) merge(existing *configv1.ClusterOperator) *configv1.Cluster
 				disabledReason = summary.Reason
 				disabledMessage = summary.Message
 			}
-		} else if summary.Operation == controllerstatus.GatheringReport {
+		case controllerstatus.GatheringReport:
 			degradingFailure = false
 			if summary.Count < GatherFailuresCountThreshold {
 				klog.V(5).Infof("Number of last gather failures %d lower than threshold %d. Not marking as disabled.",
@@ -180,6 +190,17 @@ func (c *Controller) merge(existing *configv1.ClusterOperator) *configv1.Cluster
 					summary.Count, GatherFailuresCountThreshold)
 				disabledReason = summary.Reason
 				disabledMessage = summary.Message
+			}
+		case controllerstatus.PullingSCACerts:
+			degradingFailure = false
+			if summary.Count < pullingSCACertsThreshold {
+				klog.V(4).Infof("Number of last OCM pull failures %d lower than threshold %d. Not marking as SCACertsDegraded.",
+					summary.Count, pullingSCACertsThreshold)
+			} else {
+				klog.V(4).Infof("Number of last OCM pull failures %d exceeded the threshold %d. Marking as SCACertsDegraded.",
+					summary.Count, pullingSCACertsThreshold)
+				ocmErrorReason = summary.Reason
+				ocmErrorMsg = summary.Message
 			}
 		}
 
@@ -248,6 +269,16 @@ func (c *Controller) merge(existing *configv1.ClusterOperator) *configv1.Cluster
 			})
 		}
 
+		if len(ocmErrorReason) > 0 {
+			klog.V(4).Infof("The operator is marked as %s", SCACertsExpired)
+			setOperatorStatusCondition(&existing.Status.Conditions, configv1.ClusterOperatorStatusCondition{
+				Type:    SCACertsExpired,
+				Status:  configv1.ConditionTrue,
+				Reason:  ocmErrorReason,
+				Message: ocmErrorMsg,
+			})
+		}
+
 	default:
 		// once we've initialized set Failing and Disabled as best we know
 		if len(disabledMessage) > 0 {
@@ -293,6 +324,21 @@ func (c *Controller) merge(existing *configv1.ClusterOperator) *configv1.Cluster
 		} else {
 			removeOperatorStatusCondition(&existing.Status.Conditions, UploadDegraded)
 		}
+		if len(ocmErrorMsg) > 0 {
+			klog.V(4).Infof("The operator is marked as %s", SCACertsExpired)
+			setOperatorStatusCondition(&existing.Status.Conditions, configv1.ClusterOperatorStatusCondition{
+				Type:    SCACertsExpired,
+				Status:  configv1.ConditionTrue,
+				Reason:  ocmErrorReason,
+				Message: ocmErrorMsg,
+			})
+		} else {
+			setOperatorStatusCondition(&existing.Status.Conditions, configv1.ClusterOperatorStatusCondition{
+				Type:   SCACertsExpired,
+				Status: configv1.ConditionFalse,
+				Reason: ocmErrorReason,
+			})
+		}
 	}
 
 	// once the operator is running it is always considered available
@@ -334,6 +380,16 @@ func (c *Controller) merge(existing *configv1.ClusterOperator) *configv1.Cluster
 			LastTransitionTime: metav1.Time{Time: last},
 			Reason:             reason,
 			Message:            disabledMessage,
+		})
+
+	case len(ocmErrorMsg) > 0:
+		klog.V(4).Infof("The operator is marked as %s", SCACertsExpired)
+		setOperatorStatusCondition(&existing.Status.Conditions, configv1.ClusterOperatorStatusCondition{
+			Type:               configv1.OperatorProgressing,
+			Status:             configv1.ConditionFalse,
+			LastTransitionTime: metav1.Time{Time: last},
+			Reason:             reason,
+			Message:            ocmErrorMsg,
 		})
 
 	default:
@@ -431,12 +487,6 @@ func (c *Controller) updateStatus(ctx context.Context, initial bool) error {
 	_, err = c.client.ClusterOperators().UpdateStatus(ctx, updated, metav1.UpdateOptions{})
 	return err
 }
-
-// OperatorDisabled defines the condition type when the operator's primary funcion has been disabled
-const OperatorDisabled configv1.ClusterStatusConditionType = "Disabled"
-
-// UploadDegraded defines the condition type when a report is successfully uploaded
-const UploadDegraded configv1.ClusterStatusConditionType = "UploadDegraded"
 
 func isNotAuthorizedReason(reason string) bool {
 	return reason == "NotAuthorized"
