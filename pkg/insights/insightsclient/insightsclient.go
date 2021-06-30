@@ -36,6 +36,7 @@ import (
 
 const (
 	responseBodyLogLen = 1024
+	insightsReqId      = "x-rh-insights-request-id"
 )
 
 type Client struct {
@@ -244,7 +245,7 @@ func (c *Client) Send(ctx context.Context, endpoint string, source Source) error
 		return fmt.Errorf("unable to build request to connect to Insights server: %v", err)
 	}
 
-	requestID := resp.Header.Get("x-rh-insights-request-id")
+	requestID := resp.Header.Get(insightsReqId)
 
 	defer func() {
 		if _, err := io.Copy(ioutil.Discard, resp.Body); err != nil {
@@ -258,12 +259,12 @@ func (c *Client) Send(ctx context.Context, endpoint string, source Source) error
 	counterRequestSend.WithLabelValues(c.metricsName, strconv.Itoa(resp.StatusCode)).Inc()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		klog.V(2).Infof("gateway server %s returned 401, x-rh-insights-request-id=%s", resp.Request.URL, requestID)
+		klog.V(2).Infof("gateway server %s returned 401, %s=%s", insightsReqId, resp.Request.URL, requestID)
 		return authorizer.Error{Err: fmt.Errorf("your Red Hat account is not enabled for remote support or your token has expired: %s", responseBody(resp))}
 	}
 
 	if resp.StatusCode == http.StatusForbidden {
-		klog.V(2).Infof("gateway server %s returned 403, x-rh-insights-request-id=%s", resp.Request.URL, requestID)
+		klog.V(2).Infof("gateway server %s returned 403, %s=%s", insightsReqId, resp.Request.URL, requestID)
 		return authorizer.Error{Err: fmt.Errorf("your Red Hat account is not enabled for remote support")}
 	}
 
@@ -276,7 +277,7 @@ func (c *Client) Send(ctx context.Context, endpoint string, source Source) error
 	}
 
 	if len(requestID) > 0 {
-		klog.V(2).Infof("Successfully reported id=%s x-rh-insights-request-id=%s, wrote=%d", source.ID, requestID, bytesRead)
+		klog.V(2).Infof("Successfully reported id=%s %s=%s, wrote=%d", insightsReqId, source.ID, requestID, bytesRead)
 	}
 
 	return nil
@@ -301,9 +302,9 @@ func (c Client) RecvReport(ctx context.Context, endpoint string) (*io.ReadCloser
 	if resp.StatusCode == http.StatusOK {
 		return &resp.Body, nil
 	}
-
-	klog.Warningf("Report response status code: %d", resp.StatusCode)
-	return nil, fmt.Errorf("Report response status code: %d", resp.StatusCode)
+	err = fmt.Errorf("report response status code: %d", resp.StatusCode)
+	klog.Warningf(err.Error())
+	return nil, err
 }
 
 // RecvOCMData sends a get request to the OCM API endpoint defined in the config
@@ -327,9 +328,9 @@ func (c Client) RecvOCMData(ctx context.Context, endpoint string) ([]byte, error
 		}
 		return data, nil
 	}
-
-	klog.Warningf("OCM response status code: %d", resp.StatusCode)
-	return nil, fmt.Errorf("OCM response status code: %d", resp.StatusCode)
+	err = fmt.Errorf("OCM response status code: %d", resp.StatusCode)
+	klog.Warningf(err.Error())
+	return nil, err
 }
 
 func (c Client) doGetRequest(ctx context.Context, endpoint string, addClusterID bool) (*http.Response, error) {
@@ -364,15 +365,15 @@ func (c Client) doGetRequest(ctx context.Context, endpoint string, addClusterID 
 }
 
 func validateResponse(resp *http.Response) error {
-	requestID := resp.Header.Get("x-rh-insights-request-id")
+	requestID := resp.Header.Get(insightsReqId)
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		klog.V(2).Infof("gateway server %s returned 401, x-rh-insights-request-id=%s", resp.Request.URL, requestID)
+		klog.V(2).Infof("gateway server %s returned 401, %s=%s", insightsReqId, resp.Request.URL, requestID)
 		return authorizer.Error{Err: fmt.Errorf("your Red Hat account is not enabled for remote support or your token has expired")}
 	}
 
 	if resp.StatusCode == http.StatusForbidden {
-		klog.V(2).Infof("gateway server %s returned 403, x-rh-insights-request-id=%s", resp.Request.URL, requestID)
+		klog.V(2).Infof("gateway server %s returned 403, %s=%s", insightsReqId, resp.Request.URL, requestID)
 		return authorizer.Error{Err: fmt.Errorf("your Red Hat account is not enabled for remote support")}
 	}
 
@@ -390,7 +391,7 @@ func validateResponse(resp *http.Response) error {
 		}
 		notFoundErr := InsightsError{
 			StatusCode: resp.StatusCode,
-			Err:        fmt.Errorf("insights report not found: %s (request=%s): %s", resp.Request.URL, requestID, string(body)),
+			Err:        fmt.Errorf("not found: %s (request=%s): %s", resp.Request.URL, requestID, string(body)),
 		}
 		return notFoundErr
 	}
