@@ -3,6 +3,8 @@ package clusterconfig
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 
 	configv1client "github.com/openshift/client-go/config/clientset/versioned/typed/config/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -36,5 +38,16 @@ func gatherClusterAuthentication(ctx context.Context, configClient configv1clien
 	if err != nil {
 		return nil, []error{err}
 	}
-	return []record.Record{{Name: "config/authentication", Item: record.ResourceMarshaller{Resource: config}}}, nil
+	data, err := record.ResourceMarshaller{Resource: config}.Marshal(ctx)
+	if err != nil {
+		return nil, []error{err}
+	}
+	md5 := md5.Sum(data)
+	return []record.Record{{
+		Name: "config/authentication",
+		//	Item:        record.ResourceMarshaller{Resource: config},
+		Fingerprint: hex.EncodeToString(md5[:]),
+		Data:        data,
+		Extension:   "json",
+	}}, nil
 }

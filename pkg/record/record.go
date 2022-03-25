@@ -18,11 +18,18 @@ type Record struct {
 
 	Fingerprint string
 	Item        Marshalable
+	Data        []byte
+	Extension   string
 }
 
 // Filename with extension, if present
 func (r *Record) Filename() string {
-	extension := r.Item.GetExtension()
+	var extension string
+	if r.Item == nil {
+		extension = r.Extension
+	} else {
+		extension = r.Item.GetExtension()
+	}
 	if len(extension) > 0 {
 		return fmt.Sprintf("%s.%s", r.Name, extension)
 	}

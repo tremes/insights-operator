@@ -53,9 +53,9 @@ func (r *Recorder) Record(rec record.Record) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	klog.V(4).Infof("Recording %s with fingerprint=%s", rec.Name, rec.Fingerprint)
-	if rec.Item == nil {
+	/* 	if rec.Item == nil {
 		return fmt.Errorf("empty %s record data. Nothing will be recorded", rec.Name)
-	}
+	} */
 	if r.has(rec) {
 		return nil
 	}
@@ -64,11 +64,16 @@ func (r *Recorder) Record(rec record.Record) error {
 	if at.IsZero() {
 		at = time.Now()
 	}
-
-	// TODO: handle records that are slow to capture
-	data, err := rec.Item.Marshal(context.TODO())
-	if err != nil {
-		return err
+	var data []byte
+	if rec.Item == nil {
+		data = rec.Data
+	} else {
+		// TODO: handle records that are slow to capture
+		d, err := rec.Item.Marshal(context.TODO())
+		if err != nil {
+			return err
+		}
+		data = d
 	}
 
 	recordName := rec.Filename()
