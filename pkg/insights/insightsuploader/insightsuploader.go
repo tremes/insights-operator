@@ -33,35 +33,35 @@ type StatusReporter interface {
 type Controller struct {
 	controllerstatus.StatusController
 
-	summarizer         Summarizer
-	client             *insightsclient.Client
-	secretConfigurator configobserver.Configurator
-	apiConfigurator    configobserver.InsightsDataGatherObserver
-	reporter           StatusReporter
-	archiveUploaded    chan struct{}
-	initialDelay       time.Duration
-	backoff            wait.Backoff
+	summarizer      Summarizer
+	client          *insightsclient.Client
+	configurator    configobserver.Interface
+	apiConfigurator configobserver.InsightsDataGatherObserver
+	reporter        StatusReporter
+	archiveUploaded chan struct{}
+	initialDelay    time.Duration
+	backoff         wait.Backoff
 }
 
 func New(summarizer Summarizer,
 	client *insightsclient.Client,
-	secretconfigurator configobserver.Configurator,
+	configurator configobserver.Interface,
 	apiConfigurator configobserver.InsightsDataGatherObserver,
 	statusReporter StatusReporter,
 	initialDelay time.Duration) *Controller {
 
 	ctrl := &Controller{
-		StatusController:   controllerstatus.New("insightsuploader"),
-		summarizer:         summarizer,
-		secretConfigurator: secretconfigurator,
-		apiConfigurator:    apiConfigurator,
-		client:             client,
-		reporter:           statusReporter,
-		archiveUploaded:    make(chan struct{}),
-		initialDelay:       initialDelay,
+		StatusController: controllerstatus.New("insightsuploader"),
+		summarizer:       summarizer,
+		configurator:     configurator,
+		apiConfigurator:  apiConfigurator,
+		client:           client,
+		reporter:         statusReporter,
+		archiveUploaded:  make(chan struct{}),
+		initialDelay:     initialDelay,
 	}
 	ctrl.backoff = wait.Backoff{
-		Duration: ctrl.secretConfigurator.Config().Interval / 4, // 30 min as first wait by default
+		Duration: ctrl.configurator.Config().DataReporting.Interval / 4, // 30 min as first wait by default
 		Steps:    4,
 		Factor:   2,
 	}
@@ -77,13 +77,11 @@ func (c *Controller) Run(ctx context.Context) {
 	}
 
 	// the controller periodically uploads results to the remote insights endpoint
-	cfg := c.secretConfigurator.Config()
-	configCh, cancelFn := c.secretConfigurator.ConfigChanged()
-	defer cancelFn()
+	cfg := c.configurator.Config()
 
-	reportingEnabled := cfg.Report
-	endpoint := cfg.Endpoint
-	interval := cfg.Interval
+	reportingEnabled := cfg.DataReporting.Enabled
+	endpoint := cfg.DataReporting.UploadEndpoint
+	interval := cfg.DataReporting.Interval
 	lastReported := c.reporter.LastReportedTime()
 	if !lastReported.IsZero() {
 		next := lastReported.Add(interval)
@@ -91,25 +89,28 @@ func (c *Controller) Run(ctx context.Context) {
 			c.initialDelay = wait.Jitter(now.Sub(next), 1.2)
 		}
 	}
-	klog.V(2).Infof("Reporting status periodically to %s every %s, starting in %s", cfg.Endpoint, interval, c.initialDelay.Truncate(time.Second))
+	klog.V(2).Infof("Reporting status periodically to %s every %s, starting in %s", cfg.DataReporting.UploadEndpoint, interval, c.initialDelay.Truncate(time.Second))
 
 	wait.Until(func() {
 		if c.initialDelay > 0 {
+			// HOW THE HELL THIS IS WORKING IN MASTER???
+			configCh, cancelFn := c.configurator.ConfigChanged()
+			defer cancelFn()
 			select {
 			case <-ctx.Done():
 			case <-time.After(c.initialDelay):
 			case <-configCh:
-				newCfg := c.secretConfigurator.Config()
-				interval = newCfg.Interval
-				endpoint = newCfg.Endpoint
-				reportingEnabled = newCfg.Report
+				newCfg := c.configurator.Config()
+				interval = newCfg.DataReporting.Interval
+				endpoint = newCfg.DataReporting.UploadEndpoint
+				reportingEnabled = newCfg.DataReporting.Enabled
 				var disabledInAPI bool
 				if c.apiConfigurator != nil {
 					disabledInAPI = c.apiConfigurator.GatherDisabled()
 				}
 				if !reportingEnabled || disabledInAPI {
 					klog.V(2).Infof("Reporting was disabled")
-					c.initialDelay = newCfg.Interval
+					c.initialDelay = newCfg.DataReporting.Interval
 					return
 				}
 			}
@@ -192,7 +193,7 @@ func (c *Controller) Upload(ctx context.Context, s *insightsclient.Source) (stri
 	var requestID string
 	var statusCode int
 	err := wait.ExponentialBackoff(c.backoff, func() (done bool, err error) {
-		requestID, statusCode, err = c.client.SendAndGetID(ctx, c.secretConfigurator.Config().Endpoint, *s)
+		requestID, statusCode, err = c.client.SendAndGetID(ctx, c.configurator.Config().DataReporting.UploadEndpoint, *s)
 		if err != nil {
 			// do no return the error if it's not the last attempt
 			if c.backoff.Steps > 1 {

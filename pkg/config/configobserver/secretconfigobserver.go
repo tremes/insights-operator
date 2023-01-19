@@ -48,7 +48,7 @@ func New(defaultConfig config.Controller, kubeClient kubernetes.Interface) *Cont
 	c := &Controller{
 		kubeClient:    kubeClient,
 		defaultConfig: defaultConfig,
-		checkPeriod:   5 * time.Minute,
+		checkPeriod:   1 * time.Minute,
 	}
 	c.mergeConfig()
 	if err := c.updateToken(context.TODO()); err != nil {
