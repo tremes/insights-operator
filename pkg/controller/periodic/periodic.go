@@ -192,8 +192,8 @@ func (c *Controller) Gather() {
 			gatherersToProcess = append(gatherersToProcess, gatherer)
 		}
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), c.secretConfigurator.Config().Interval)
+	interval := c.secretConfigurator.Config().Interval
+	ctx, cancel := context.WithTimeout(context.Background(), interval)
 	defer cancel()
 
 	allFunctionReports := make(map[string]gather.GathererFunctionReport)
@@ -244,7 +244,6 @@ func (c *Controller) periodicTrigger(stopCh <-chan struct{}) {
 		select {
 		case <-stopCh:
 			return
-
 		case <-configCh:
 			newInterval := c.secretConfigurator.Config().Interval
 			if newInterval == interval {
@@ -252,7 +251,6 @@ func (c *Controller) periodicTrigger(stopCh <-chan struct{}) {
 			}
 			interval = newInterval
 			klog.Infof("Gathering cluster info every %s", interval)
-
 		case <-time.After(interval):
 			c.Gather()
 		}

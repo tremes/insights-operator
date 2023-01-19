@@ -14,6 +14,7 @@ import (
 	operatorv1client "github.com/openshift/client-go/operator/clientset/versioned/typed/operator/v1"
 	"github.com/openshift/library-go/pkg/controller/controllercmd"
 	"github.com/openshift/library-go/pkg/operator/configobserver/featuregates"
+	"github.com/openshift/library-go/pkg/operator/v1helpers"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -149,6 +150,14 @@ func (s *Operator) Run(ctx context.Context, controller *controllercmd.Controller
 		go dgInformer.Run(ctx, 1)
 		go insightsInformersfactory.Start(ctx.Done())
 	}
+
+	kubeInf := v1helpers.NewKubeInformersForNamespaces(kubeClient, "openshift-insights")
+	configMapObserver, err := configobserver.NewConfigMapObserver(ctx, gatherKubeConfig, controller.EventRecorder, kubeInf)
+	if err != nil {
+		return err
+	}
+	go kubeInf.Start(ctx.Done())
+	go configMapObserver.Run(ctx, 1)
 
 	// secretConfigObserver synthesizes all config into the status reporter controller
 	secretConfigObserver := configobserver.New(s.Controller, kubeClient)

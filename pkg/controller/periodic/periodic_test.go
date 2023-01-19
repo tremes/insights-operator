@@ -209,6 +209,10 @@ func getMocksForPeriodicTest(listGatherers []gatherers.Interface, interval time.
 		Report:   true,
 		Interval: interval,
 	}}
+	mockAPIConfigurator := config.NewMockAPIConfigurator(&v1alpha1.GatherConfig{})
+	mockConfigMapCOonfigurator := config.NewMockConfigMapConfigurator(&config.InsightsConfiguration{
+		DataReporting: config.DataReporting{},
+	})
 	mockRecorder := recorder.MockRecorder{}
 	mockAnonymizer, err := anonymization.NewAnonymizer("", []string{}, nil, &mockConfigurator, "")
 	if err != nil {
