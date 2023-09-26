@@ -7,6 +7,10 @@ import (
 	"time"
 
 	"github.com/openshift/insights-operator/pkg/config"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/klog/v2"
 )
 
 type Interface interface {
@@ -33,6 +37,41 @@ func NewConfigAggregator(ctrl Configurator, configMapInf ConfigMapInformer) Inte
 	}
 	confAggreg.aggregate()
 	return confAggreg
+}
+
+// NewStaticConfigAggregator is a constructor used mainly for the techpreview configuration reading.
+// There is no reason to create and start any informer in the techpreview when data gathering runs as a job.
+// It is sufficient to read the config once when the job is created and/or starting.
+func NewStaticConfigAggregator(ctx context.Context, ctrl Configurator, cli *kubernetes.Clientset) Interface {
+	confAggreg := &ConfigAggregator{
+		legacyConfigurator: ctrl,
+		configMapInformer:  nil,
+	}
+
+	confAggreg.aggregateStatically(ctx, cli)
+	return confAggreg
+}
+
+func (c *ConfigAggregator) aggregateStatically(ctx context.Context, kubeClient *kubernetes.Clientset) {
+	// TODO
+	// read or pass the configmap just once and
+	// then merge the configs
+
+	cm, err := kubeClient.CoreV1().ConfigMaps("openshift-insights").Get(ctx, insightsConfigMapName, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return
+		}
+	}
+
+	cmConf, err := readConfigAndDecode(cm)
+	if err != nil {
+		klog.Error("Failed to readn configmap configuration: %v", err)
+		return
+	}
+
+	// finally
+	c.configAggregated = cmConf
 }
 
 func (c *ConfigAggregator) aggregate() {
@@ -64,7 +103,6 @@ func (c *ConfigAggregator) aggregate() {
 
 	c.configAggregated = conf
 	fmt.Println("========================= CONFIG MERGED", c.configAggregated)
-
 }
 
 func (c *ConfigAggregator) Config() *config.InsightsConfiguration {

@@ -69,6 +69,7 @@ func (g *GatherJob) Gather(ctx context.Context, kubeConfig, protoKubeConfig *res
 
 	// configobserver synthesizes all config into the status reporter controller
 	configObserver := configobserver.New(g.Controller, kubeClient)
+	configAggregator := configobserver.NewStaticConfigAggregator(ctx, configObserver, kubeClient)
 
 	// anonymizer is responsible for anonymizing sensitive data, it can be configured to disable specific anonymization
 	anonymizer, err := anonymization.NewAnonymizerFromConfig(
@@ -99,7 +100,7 @@ func (g *GatherJob) Gather(ctx context.Context, kubeConfig, protoKubeConfig *res
 	insightsClient := insightsclient.New(nil, 0, "default", authorizer, gatherConfigClient)
 	createdGatherers := gather.CreateAllGatherers(
 		gatherKubeConfig, gatherProtoKubeConfig, metricsGatherKubeConfig, alertsGatherKubeConfig, anonymizer,
-		configObserver, insightsClient,
+		configAggregator, insightsClient,
 	)
 
 	allFunctionReports := make(map[string]gather.GathererFunctionReport)
@@ -155,8 +156,10 @@ func (g *GatherJob) GatherAndUpload(kubeConfig, protoKubeConfig *rest.Config) er
 	if err != nil {
 		return err
 	}
+
 	// configobserver synthesizes all config into the status reporter controller
 	configObserver := configobserver.New(g.Controller, kubeClient)
+	configAggregator := configobserver.NewStaticConfigAggregator(ctx, configObserver, kubeClient)
 	// anonymizer is responsible for anonymizing sensitive data, it can be configured to disable specific anonymization
 	anonymizer, err := anonymization.NewAnonymizerFromConfig(
 		ctx, gatherKubeConfig, gatherProtoKubeConfig, protoKubeConfig, configObserver, dataGatherCR.Spec.DataPolicy)
@@ -177,7 +180,7 @@ func (g *GatherJob) GatherAndUpload(kubeConfig, protoKubeConfig *rest.Config) er
 
 	createdGatherers := gather.CreateAllGatherers(
 		gatherKubeConfig, gatherProtoKubeConfig, metricsGatherKubeConfig, alertsGatherKubeConfig, anonymizer,
-		configObserver, insightsHTTPCli,
+		configAggregator, insightsHTTPCli,
 	)
 	// TODO FIX??
 	uploader := insightsuploader.New(nil, insightsHTTPCli, nil, nil, nil, 0)
