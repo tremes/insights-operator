@@ -427,6 +427,8 @@ func (g *GatherJob) storagePathExists() error {
 	return nil
 }
 
+// featureGateAcces gets the FeatureGate "cluster" instance and uses the featureGate to initialize
+// static FeatureGateAccess. Then it returns the current feature gates or an error when any of the API calls failed.
 func featureGateAcces(ctx context.Context, kubeConfig *rest.Config) (featuregates.FeatureGate, error) {
 	configClient, err := configv1client.NewForConfig(kubeConfig)
 	if err != nil {
