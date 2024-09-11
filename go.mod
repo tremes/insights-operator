@@ -10,9 +10,9 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 	github.com/openshift/api v0.0.0-20240909041644-5852b58f4b10
 	github.com/openshift/build-machinery-go v0.0.0-20240419090851-af9c868bcf52
-	github.com/openshift/client-go v0.0.0-20240528061634-b054aa794d87
+	github.com/openshift/client-go v0.0.0-20240906181530-b2f7c4ab0984
 	github.com/openshift/installer v0.9.0-master.0.20191219195746-103098955ced
-	github.com/openshift/library-go v0.0.0-20240905123346-5bdbfe35a6f5
+	github.com/openshift/library-go v0.0.0-20240910113733-b17e2f87dcfa
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.74.0
 	github.com/prometheus-operator/prometheus-operator/pkg/client v0.65.2
 	github.com/prometheus/client_golang v1.18.0

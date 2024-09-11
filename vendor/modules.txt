@@ -240,7 +240,7 @@ github.com/openshift/build-machinery-go/make/targets/golang
 github.com/openshift/build-machinery-go/make/targets/openshift
 github.com/openshift/build-machinery-go/make/targets/openshift/operator
 github.com/openshift/build-machinery-go/scripts
-# github.com/openshift/client-go v0.0.0-20240528061634-b054aa794d87
+# github.com/openshift/client-go v0.0.0-20240906181530-b2f7c4ab0984
 ## explicit; go 1.22.0
 github.com/openshift/client-go/authorization/applyconfigurations/authorization/v1
 github.com/openshift/client-go/authorization/applyconfigurations/internal
@@ -342,7 +342,7 @@ github.com/openshift/installer/pkg/types/libvirt
 github.com/openshift/installer/pkg/types/none
 github.com/openshift/installer/pkg/types/openstack
 github.com/openshift/installer/pkg/types/vsphere
-# github.com/openshift/library-go v0.0.0-20240905123346-5bdbfe35a6f5
+# github.com/openshift/library-go v0.0.0-20240910113733-b17e2f87dcfa
 ## explicit; go 1.22.0
 github.com/openshift/library-go/pkg/authorization/hardcodedauthorizer
 github.com/openshift/library-go/pkg/certs
